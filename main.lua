@@ -1,9 +1,11 @@
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
+-- FOV circle setup
 local FOVRadius = 230
 local FOVCircle = Instance.new("Frame")
 FOVCircle.Size = UDim2.new(0, FOVRadius * 2, 0, FOVRadius * 2)
@@ -15,7 +17,9 @@ FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 FOVCircle.Parent = game:GetService("CoreGui") -- or ScreenGui
 
 local playerHighlights = {}
+local targetMarker -- To show current target
 
+-- Create highlight for character parts
 local function createHighlightsForCharacter(character)
     local highlights = {}
     for _, part in pairs(character:GetChildren()) do
@@ -48,14 +52,17 @@ local function setupPlayerHighlights(player)
     end)
 end
 
+-- Setup highlights for existing players
 for _, player in pairs(Players:GetPlayers()) do
     setupPlayerHighlights(player)
 end
 
+-- Setup for new players
 Players.PlayerAdded:Connect(function(player)
     setupPlayerHighlights(player)
 end)
 
+-- Cleanup when players leave
 Players.PlayerRemoving:Connect(function(player)
     if playerHighlights[player] then
         for _, hl in ipairs(playerHighlights[player]) do
@@ -72,6 +79,7 @@ local function getRainbowColor(time, speed)
     return Color3.fromHSV(hue, 1, 1)
 end
 
+-- Target filtering: For demo, assume all other players are enemies
 local function getClosestTarget()
     local closestPlayer = nil
     local closestDistance = math.huge
@@ -84,6 +92,7 @@ local function getClosestTarget()
                 if onScreen then
                     local distance = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).magnitude
                     if distance <= FOVRadius then
+                        -- Line of sight check
                         local origin = Camera.CFrame.Position
                         local direction = (hrp.Position - origin).unit * 1000
                         local raycastParams = RaycastParams.new()
@@ -104,9 +113,9 @@ local function getClosestTarget()
     return closestPlayer
 end
 
-local isAimbotActive = false -- Track if right mouse button is held
+local isAimbotActive = false -- Track if right mouse is held
 
--- Detect right mouse button hold and release
+-- Detect right mouse hold for aim
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -121,11 +130,23 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     end
 end)
 
+-- For visualizing current target
+local function createTargetMarker()
+    local marker = Instance.new("Frame")
+    marker.Size = UDim2.new(0, 20, 0, 20)
+    marker.BackgroundColor3 = Color3.new(0, 1, 0)
+    marker.BorderSizePixel = 2
+    marker.Parent = game:GetService("CoreGui")
+    return marker
+end
+
+targetMarker = createTargetMarker()
+
 -- Main loop
 RunService.RenderStepped:Connect(function()
     local currentTime = tick()
 
-    -- Update highlights colors
+    -- Update rainbow colors for highlights
     for _, highlights in pairs(playerHighlights) do
         for _, hl in ipairs(highlights) do
             if hl and hl.Adornee then
@@ -134,14 +155,38 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    if isAimbotActive then
-        local targetPlayer = getClosestTarget()
-        if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = targetPlayer.Character.HumanoidRootPart
-            local targetPosition = hrp.Position
-            -- Instantly aim at target
-            local currentCFrame = Camera.CFrame
-            Camera.CFrame = CFrame.new(currentCFrame.Position, targetPosition)
+    -- Find closest target
+    local targetPlayer = getClosestTarget()
+
+    -- Show current target marker
+    if targetPlayer and targetPlayer.Character then
+        local head = targetPlayer.Character:FindFirstChild("Head")
+        if head then
+            local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
+            if onScreen then
+                -- Show marker at the head position
+                targetMarker.Position = UDim2.new(0, screenPos.X - 10, 0, screenPos.Y - 10)
+                targetMarker.Visible = true
+            else
+                targetMarker.Visible = false
+            end
+        else
+            targetMarker.Visible = false
+        end
+    else
+        targetMarker.Visible = false
+    end
+
+    -- Aim smoothly at the target's head
+    if isAimbotActive and targetPlayer and targetPlayer.Character then
+        local head = targetPlayer.Character:FindFirstChild("Head")
+        if head then
+            local targetPosition = head.Position
+            -- Smooth aim: Lerp camera look vector
+            local currentLook = Camera.CFrame.LookVector
+            local desiredLook = (targetPosition - Camera.CFrame.Position).Unit
+            local newLook = currentLook:Lerp(desiredLook, 0.2) -- Adjust 0.2 for smoothness
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + newLook)
         end
     end
 end)
