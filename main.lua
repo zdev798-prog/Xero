@@ -122,13 +122,6 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     end
 end)
 
--- Smoothing function for camera movement
-local function lerpCFrame(a, b, t)
-    return a:Lerp(b, t)
-end
-
-local aimSmoothing = 0.2 -- Adjust for smoother or snappier aim
-
 -- Main loop
 RunService.RenderStepped:Connect(function()
     local currentTime = tick()
@@ -146,15 +139,12 @@ RunService.RenderStepped:Connect(function()
     if isAimbotActive then
         local targetPlayer = getClosestTarget()
         if targetPlayer and targetPlayer.Character then
-            -- Get head part
             local head = targetPlayer.Character:FindFirstChild("Head")
             if head then
                 local targetPosition = head.Position
-                -- Calculate desired camera CFrame
+                -- Instantly aim at the target's head
                 local currentCFrame = Camera.CFrame
-                local targetCFrame = CFrame.new(currentCFrame.Position, targetPosition)
-                -- Smoothly interpolate camera
-                Camera.CFrame = lerpCFrame(currentCFrame, targetCFrame, aimSmoothing)
+                Camera.CFrame = CFrame.new(currentCFrame.Position, targetPosition)
             end
         end
     end
