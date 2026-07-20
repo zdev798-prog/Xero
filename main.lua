@@ -1,11 +1,9 @@
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- FOV circle setup
 local FOVRadius = 230
 local FOVCircle = Instance.new("Frame")
 FOVCircle.Size = UDim2.new(0, FOVRadius * 2, 0, FOVRadius * 2)
@@ -18,7 +16,6 @@ FOVCircle.Parent = game:GetService("CoreGui") -- or ScreenGui
 
 local playerHighlights = {}
 
--- Create highlights for character parts
 local function createHighlightsForCharacter(character)
     local highlights = {}
     for _, part in pairs(character:GetChildren()) do
@@ -51,17 +48,14 @@ local function setupPlayerHighlights(player)
     end)
 end
 
--- Setup highlights for existing players
 for _, player in pairs(Players:GetPlayers()) do
     setupPlayerHighlights(player)
 end
 
--- Setup for new players
 Players.PlayerAdded:Connect(function(player)
     setupPlayerHighlights(player)
 end)
 
--- Cleanup when players leave
 Players.PlayerRemoving:Connect(function(player)
     if playerHighlights[player] then
         for _, hl in ipairs(playerHighlights[player]) do
@@ -78,7 +72,6 @@ local function getRainbowColor(time, speed)
     return Color3.fromHSV(hue, 1, 1)
 end
 
--- Find the closest target within FOV
 local function getClosestTarget()
     local closestPlayer = nil
     local closestDistance = math.huge
@@ -112,9 +105,9 @@ local function getClosestTarget()
     return closestPlayer
 end
 
-local isAimbotActive = false -- Track if right mouse is held
+local isAimbotActive = false -- Track if right mouse button is held
 
--- Detect right mouse hold for aim
+-- Detect right mouse button hold and release
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -129,23 +122,18 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     end
 end)
 
--- Create a marker for current target
-local function createTargetMarker()
-    local marker = Instance.new("Frame")
-    marker.Size = UDim2.new(0, 20, 0, 20)
-    marker.BackgroundColor3 = Color3.new(0, 1, 0)
-    marker.BorderSizePixel = 2
-    marker.Parent = game:GetService("CoreGui")
-    return marker
+-- Smoothing function for camera movement
+local function lerpCFrame(a, b, t)
+    return a:Lerp(b, t)
 end
 
-local targetMarker = createTargetMarker()
+local aimSmoothing = 0.2 -- Adjust for smoother or snappier aim
 
 -- Main loop
 RunService.RenderStepped:Connect(function()
     local currentTime = tick()
 
-    -- Update rainbow colors for highlights
+    -- Update highlights colors
     for _, highlights in pairs(playerHighlights) do
         for _, hl in ipairs(highlights) do
             if hl and hl.Adornee then
@@ -154,38 +142,20 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Find closest target
-    local targetPlayer = getClosestTarget()
-
-    -- Show current target marker
-    if targetPlayer and targetPlayer.Character then
-        local head = targetPlayer.Character:FindFirstChild("Head")
-        if head then
-            local screenPos, onScreen = Camera:WorldToScreenPoint(head.Position)
-            if onScreen then
-                -- Position marker at head
-                targetMarker.Position = UDim2.new(0, screenPos.X - 10, 0, screenPos.Y - 10)
-                targetMarker.Visible = true
-            else
-                targetMarker.Visible = false
+    -- Aim at target when holding right mouse button
+    if isAimbotActive then
+        local targetPlayer = getClosestTarget()
+        if targetPlayer and targetPlayer.Character then
+            -- Get head part
+            local head = targetPlayer.Character:FindFirstChild("Head")
+            if head then
+                local targetPosition = head.Position
+                -- Calculate desired camera CFrame
+                local currentCFrame = Camera.CFrame
+                local targetCFrame = CFrame.new(currentCFrame.Position, targetPosition)
+                -- Smoothly interpolate camera
+                Camera.CFrame = lerpCFrame(currentCFrame, targetCFrame, aimSmoothing)
             end
-        else
-            targetMarker.Visible = false
-        end
-    else
-        targetMarker.Visible = false
-    end
-
-    -- Smooth aim at target's head when holding right mouse button
-    if isAimbotActive and targetPlayer and targetPlayer.Character then
-        local head = targetPlayer.Character:FindFirstChild("Head")
-        if head then
-            local targetPosition = head.Position
-            -- Smoothly rotate camera towards target
-            local currentLook = Camera.CFrame.LookVector
-            local desiredLook = (targetPosition - Camera.CFrame.Position).Unit
-            local newLook = currentLook:Lerp(desiredLook, 0.2) -- Adjust for smoothness
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + newLook)
         end
     end
 end)
